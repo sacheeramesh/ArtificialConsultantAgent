@@ -1,15 +1,20 @@
+from flask import Flask, request  # import flask
+from flask_restful import Resource, Api  # for API building
 import nltk
 from nltk.stem.lancaster import LancasterStemmer
-
-stemmer = LancasterStemmer()
-
 import numpy
 import tflearn
 import tensorflow
 import random
 import json
 
-with open("intents.json") as file:
+app = Flask(__name__)  # create an app instance
+api = Api(app)  # integrating restful api for app
+
+stemmer = LancasterStemmer()
+
+# data preprocessing for train DNN
+with open("TrainedAlgorithms/DnnKnowledgeModel/intents.json") as file:
     data = json.load(file)
 
 words = []
@@ -57,7 +62,8 @@ for x, doc in enumerate(docs_x):
 training = numpy.array(training)
 output = numpy.array(output)
 
-# traning the model
+# Traning DNN
+
 tensorflow.reset_default_graph()
 
 net = tflearn.input_data(shape=[None, len(training[0])])
@@ -68,11 +74,12 @@ net = tflearn.regression(net)
 
 model = tflearn.DNN(net)
 
-model.fit(training, output, n_epoch=1000, batch_size=8, show_metric=True)
-model.save("model.tflearn")
+# try to open model or train new
+
+model.load("TrainedAlgorithms/DnnKnowledgeModel/model.tflearn")
 
 
-# sample run on trained model
+# Prediction
 
 def bag_of_words(s, words):
     bag = [0 for _ in range(len(words))]
@@ -88,22 +95,40 @@ def bag_of_words(s, words):
     return numpy.array(bag)
 
 
-def chat():
+def chat(inp):
     print("Start talking with the bot (type quit to stop)!")
-    while True:
-        inp = input("You: ")
-        if inp.lower() == "quit":
-            break
 
-        results = model.predict([bag_of_words(inp, words)])
-        results_index = numpy.argmax(results)
-        tag = labels[results_index]
+    results = model.predict([bag_of_words(inp, words)])
+    results_index = numpy.argmax(results)
+    tag = labels[results_index]
 
-        for tg in data["intents"]:
-            if tg['tag'] == tag:
-                responses = tg['responses']
+    for tg in data["intents"]:
+        if tg['tag'] == tag:
+            responses = tg['responses']
 
-        print(random.choice(responses))
+    return random.choice(responses)
 
 
-chat()
+
+
+
+class DnnKnowledgeApi(Resource):
+    def post(self):
+        query_json = request.get_json(force=True)
+        query = query_json['query']
+        response = chat(query)
+        return {"response" :response }, 201
+
+
+api.add_resource(DnnKnowledgeApi, '/dnnapi')
+
+
+class Home(Resource):
+    def get(self):
+        return "Use the API"
+
+
+api.add_resource(Home, '/')
+
+if __name__ == "__main__":  # on running python app.py
+    app.run(debug=True)  # run with debug mood

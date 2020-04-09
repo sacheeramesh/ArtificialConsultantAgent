@@ -1,15 +1,18 @@
+from flask import Flask  # import flask
 import nltk
 from nltk.stem.lancaster import LancasterStemmer
-
-stemmer = LancasterStemmer()
-
 import numpy
 import tflearn
 import tensorflow
 import random
 import json
 
-with open("intents.json") as file:
+app = Flask(__name__)  # create an app instance
+
+stemmer = LancasterStemmer()
+
+#data preprocessing for train DNN
+with open("TrainedAlgorithms/DnnKnowledgeModel/intents.json") as file:
     data = json.load(file)
 
 words = []
@@ -57,7 +60,8 @@ for x, doc in enumerate(docs_x):
 training = numpy.array(training)
 output = numpy.array(output)
 
-# traning the model
+# Traning DNN
+
 tensorflow.reset_default_graph()
 
 net = tflearn.input_data(shape=[None, len(training[0])])
@@ -68,11 +72,12 @@ net = tflearn.regression(net)
 
 model = tflearn.DNN(net)
 
-model.fit(training, output, n_epoch=1000, batch_size=8, show_metric=True)
-model.save("model.tflearn")
+# try to open model or train new
+
+model.load("TrainedAlgorithms/DnnKnowledgeModel/model.tflearn")
 
 
-# sample run on trained model
+# Prediction
 
 def bag_of_words(s, words):
     bag = [0 for _ in range(len(words))]
@@ -88,22 +93,24 @@ def bag_of_words(s, words):
     return numpy.array(bag)
 
 
-def chat():
+def chat(inp):
     print("Start talking with the bot (type quit to stop)!")
-    while True:
-        inp = input("You: ")
-        if inp.lower() == "quit":
-            break
 
-        results = model.predict([bag_of_words(inp, words)])
-        results_index = numpy.argmax(results)
-        tag = labels[results_index]
+    results = model.predict([bag_of_words(inp, words)])
+    results_index = numpy.argmax(results)
+    tag = labels[results_index]
 
-        for tg in data["intents"]:
-            if tg['tag'] == tag:
-                responses = tg['responses']
+    for tg in data["intents"]:
+        if tg['tag'] == tag:
+            responses = tg['responses']
 
-        print(random.choice(responses))
+    return random.choice(responses)
 
 
-chat()
+@app.route("/")  # at the end point /
+def hello():  # call method hello
+    return chat("what is your name?")
+
+
+if __name__ == "__main__":  # on running python app.py
+    app.run(debug=True)  # run with debug mood
